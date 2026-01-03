@@ -1,0 +1,8 @@
+{
+  "name": "shukla-music-bot",
+  "version": "1.0.0",
+  "description": "Node helper for PyTgCalls",
+  "engines": {
+    "node": ">=18"
+  }
+}
