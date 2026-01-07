@@ -171,7 +171,7 @@ queue_6 : "<b>🕚 ᴅᴜʀᴀᴛɪᴏɴ :</b> ᴜɴᴋɴᴏᴡɴ ᴅᴜʀᴀᴛ
 queue_7 : "\nᴄʟɪᴄᴋ ᴏɴ ʙᴜᴛᴛᴏɴ ʙᴇʟᴏᴡ ᴛᴏ ɢᴇᴛ ᴡʜᴏʟᴇ ǫᴜᴇᴜᴇᴅ ʟɪsᴛ."
 queue_8 : "<b>{0} ᴘʟᴀʏᴇʀ</b>\n\n🎄 <b>sᴛʀᴇᴀᴍɪɴɢ :</b> {1}\n\n🔗 <b>sᴛʀᴇᴀᴍ ᴛʏᴘᴇ :</b> {2}\n🥀 <b>ʀᴇǫᴜᴇsᴛᴇᴅ ʙʏ :</b> {3}\n{4}"
 
-stream_1: "<blockquote> 𝚲𝛈𝛊𝛄𝛂 Mυʂιƈ ♫♪ ˼ ♪</blockquote>\n<blockquote><b>Title :</b> <a href='{0}'>{1}</a>\n<b>Duration :</b> {2} MINUTES\n<b>By :</b> {3}\n<b>Loaded In :</b> {4} Seconds</blockquote>\n<blockquote><b>Pᴏᴡᴇʀᴇᴅ ʙʏ:</b> <a href='https://t.me/THE_BOSS_JI'>Ᏼø፝֟፝֟ssㅤᴊɪɪ ┋ꕥ</a></blockquote>"
+stream_1: "<blockquote> 𝚲𝛈𝛊𝛄𝛂 Mυʂιƈ ♫♪ ˼ ♪</blockquote>\n<blockquote><b>Title :</b> <a href='{0}'>{1}</a>\n<b>Duration :</b> {2} MINUTES\n<b>By :</b> {3}</blockquote>\n<blockquote><b>ʟᴏᴀᴅᴇᴅ ɪɴ :</b> {4} ꜱᴇᴄᴏɴᴅꜱ</blockquote>\n<blockquote><b>ᴘᴏᴡᴇʀᴇᴅ ʙʏ :</b> 𝐒 𝛖 𝐝 ֟፝ᥱ 𝛆 𝛒</blockquote>"
 stream_2: "<blockquote> 𝚲𝛈𝛊𝛄𝛂 Mυʂιƈ ♫♪ ˼ ♪</blockquote>\n<blockquote><b>➲ Sᴛᴀʀᴛᴇᴅ Sᴛʀᴇᴀᴍɪɴɢ</b>\n\n‣ sᴛʀᴇᴀᴍ ᴛʏᴘᴇ : ʟɪᴠᴇ sᴛʀᴇᴀᴍ <a href='{0}'>ᴜʀʟ</a>\n‣ ʙʏ : {1}</blockquote>\n<blockquote><b>Pᴏᴡᴇʀᴇᴅ ʙʏ:</b> <a href='https://t.me/THE_BOSS_JI'>Ᏼø፝֟፝֟ssㅤᴊɪɪ ┋ꕥ</a></blockquote>"
 
 CLOSE_BUTTON: "⦿ ᴄʟᴏsᴇ ⦿"
@@ -326,6 +326,7 @@ song_11 : "ᴜᴘʟᴏᴀᴅɪɴɢ sᴛᴀʀᴛᴇᴅ ʙᴀʙʏ\n\nᴘʟᴇᴀs�
 SG_B_1 : "• ᴄʟɪᴄᴋ ʜᴇʀᴇ •"
 SG_B_2 : "🎧 ᴀᴜᴅɪᴏ 🎧"
 SG_B_3 : "🎥 ᴠɪᴅᴇᴏ 🎥"
+
 
 
 
