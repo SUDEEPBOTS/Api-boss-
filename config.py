@@ -15,6 +15,8 @@ BOT_TOKEN = getenv("BOT_TOKEN")
 
 BOT_USERNAME = "@ANIYA_MUSIC_BOT"
 
+GROQ_API_KEY = getenv("GROQ_API_KEY", None)
+
 # Get your mongo url from cloud.mongodb.com
 MONGO_DB_URI = getenv("MONGO_DB_URI", None)
 
@@ -126,4 +128,5 @@ if SUPPORT_GROUP:
             "[ERROR] - Your SUPPORT_GROUP url is wrong. Please ensure that it starts with https://"
 )
         
+
 
