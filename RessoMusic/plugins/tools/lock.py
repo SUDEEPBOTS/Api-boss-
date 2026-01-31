@@ -15,10 +15,7 @@ TIMEZONE = pytz.timezone("Asia/Kolkata")
 LOCK_HOUR = 1   # 1 AM
 UNLOCK_HOUR = 6 # 6 AM
 
-# --- PERMISSIONS (SAFE MODE - NO CRASH) ---
-# Maine yahan se 'animations', 'games' etc hata diye hain jo error de rahe the.
-
-# 1. Lock Mode: SAB BAND
+# --- PERMISSIONS (SAFE MODE) ---
 LOCK_PERMISSIONS = ChatPermissions(
     can_send_messages=False,
     can_send_media_messages=False,
@@ -27,7 +24,6 @@ LOCK_PERMISSIONS = ChatPermissions(
     can_pin_messages=False
 )
 
-# 2. Unlock Mode: TEXT ON (Media Blocked)
 UNLOCK_PERMISSIONS = ChatPermissions(
     can_send_messages=True,
     can_send_media_messages=False,
@@ -47,7 +43,7 @@ async def is_admin(chat_id, user_id):
         pass
     return False
 
-# --- BACKGROUND SCHEDULER ---
+# --- BACKGROUND SCHEDULER (FIXED) ---
 async def night_mode_scheduler():
     while True:
         try:
@@ -63,22 +59,42 @@ async def night_mode_scheduler():
 
                 try:
                     if should_be_locked and last_action != "locked":
-                        # LOCK
+                        # --- ATTEMPT LOCK ---
                         await app.set_chat_permissions(chat_id, LOCK_PERMISSIONS)
-                        await app.send_message(chat_id, "🔐 Night Mode Active\n\nGroup is locked until 6:00 AM.")
+                        await app.send_message(chat_id, "🔐 **Night Mode Active**\n\nGroup is locked until 6:00 AM.")
                         await db.update_one({"chat_id": chat_id}, {"$set": {"last_action": "locked"}})
                     
                     elif not should_be_locked and last_action != "unlocked":
-                        # UNLOCK
-                        await app.set_chat_permissions(chat_id, UNLOCK_PERMISSIONS)
-                        await app.send_message(chat_id, "🔓 Good Morning\n\nGroup is now open.")
+                        # --- ATTEMPT UNLOCK ---
+                        # Only send message if previous state was explicitly locked (avoids startup spam)
+                        if last_action == "locked":
+                             await app.set_chat_permissions(chat_id, UNLOCK_PERMISSIONS)
+                             await app.send_message(chat_id, "🔓 **Good Morning**\n\nGroup is now open.")
+                        
+                        # Update DB even if we didn't send message, to prevent loops
                         await db.update_one({"chat_id": chat_id}, {"$set": {"last_action": "unlocked"}})
                 
                 except Exception as e:
-                    print(f"Lock Error in {chat_id}: {e}")
+                    err_str = str(e).upper()
+                    
+                    # --- FIX 1: CHAT_ADMIN_REQUIRED ---
+                    # If bot is not admin, disable night mode for this group to stop log spam
+                    if "CHAT_ADMIN_REQUIRED" in err_str or "ADMIN PRIVILEGES" in err_str:
+                        print(f"[Lock] Auto-Disabling for {chat_id} due to missing Admin Rights.")
+                        await db.update_one({"chat_id": chat_id}, {"$set": {"status": "off"}})
+                    
+                    # --- FIX 2: CHAT_NOT_MODIFIED ---
+                    # If permissions are already set, Telegram returns this error.
+                    # We should treat this as a success and update DB.
+                    elif "CHAT_NOT_MODIFIED" in err_str:
+                        correct_state = "locked" if should_be_locked else "unlocked"
+                        await db.update_one({"chat_id": chat_id}, {"$set": {"last_action": correct_state}})
+                    
+                    else:
+                        print(f"Lock Scheduler Unknown Error in {chat_id}: {e}")
                     
         except Exception as e:
-            print(f"Scheduler Error: {e}")
+            print(f"Main Scheduler Error: {e}")
 
         await asyncio.sleep(60)
 
@@ -98,10 +114,10 @@ async def setlock_command(client, message: Message):
     callback_data = "lock_disable" if is_active else "lock_enable"
 
     text = (
-        f"🔐 Auto Lock Settings (India Time)\n\n"
-        f"Lock Time: 01:00 AM\n"
-        f"Unlock Time: 06:00 AM\n\n"
-        f"Status: {status_text}"
+        f"🔐 **Auto Lock Settings** (India Time)\n\n"
+        f"🌙 **Lock Time:** 01:00 AM\n"
+        f"☀️ **Unlock Time:** 06:00 AM\n\n"
+        f"📊 **Status:** {status_text}"
     )
 
     buttons = InlineKeyboardMarkup([
@@ -118,14 +134,20 @@ async def enable_lock(client, callback_query: CallbackQuery):
     if not await is_admin(callback_query.message.chat.id, callback_query.from_user.id):
         return await callback_query.answer("❌ Admins Only!", show_alert=True)
     
+    # Calculate current state immediately to prevent "Good Morning" spam on enable
+    now = datetime.now(TIMEZONE)
+    current_hour = now.hour
+    should_be_locked = LOCK_HOUR <= current_hour < UNLOCK_HOUR
+    initial_state = "locked" if should_be_locked else "unlocked"
+
     await db.update_one(
         {"chat_id": callback_query.message.chat.id},
-        {"$set": {"status": "on", "last_action": "none"}},
+        {"$set": {"status": "on", "last_action": initial_state}},
         upsert=True
     )
     await callback_query.answer("Auto Lock Enabled!", show_alert=True)
     await callback_query.message.edit_text(
-        "✅ Auto Lock System Enabled\n\nGroup will lock at 1 AM and unlock at 6 AM."
+        "✅ **Auto Lock System Enabled**\n\nGroup will automatically Lock at 1 AM and Unlock at 6 AM."
     )
 
 @app.on_callback_query(filters.regex("lock_disable") & ~BANNED_USERS)
@@ -140,18 +162,17 @@ async def disable_lock(client, callback_query: CallbackQuery):
     )
     await callback_query.answer("Auto Lock Disabled!", show_alert=True)
     await callback_query.message.edit_text(
-        "❌ Auto Lock System Disabled"
+        "❌ **Auto Lock System Disabled**"
     )
 
 @app.on_callback_query(filters.regex("lock_check_perms") & ~BANNED_USERS)
 async def check_perms_lock(client, callback_query: CallbackQuery):
-    await callback_query.answer("Fetching info...", show_alert=False)
     text = (
-        "📋 Permission Details\n\n"
-        "1. At 01:00 AM (Lock):\n"
+        "📋 **Permission Details**\n\n"
+        "1. **At 01:00 AM (Lock):**\n"
         "• Send Messages: ❌\n"
         "• Send Media: ❌\n\n"
-        "2. At 06:00 AM (Unlock):\n"
+        "2. **At 06:00 AM (Unlock):**\n"
         "• Send Messages: ✅\n"
         "• Send Media: ❌ (Blocked)"
     )
@@ -162,6 +183,7 @@ async def check_perms_lock(client, callback_query: CallbackQuery):
 
 @app.on_callback_query(filters.regex("lock_back") & ~BANNED_USERS)
 async def back_lock_menu(client, callback_query: CallbackQuery):
+    # Retrieve current status to update the button text correctly
     doc = await db.find_one({"chat_id": callback_query.message.chat.id})
     is_active = doc and doc.get("status") == "on"
     
@@ -170,7 +192,7 @@ async def back_lock_menu(client, callback_query: CallbackQuery):
     callback_data = "lock_disable" if is_active else "lock_enable"
 
     text = (
-        f"🔐 Auto Lock Settings\n\n"
+        f"🔐 **Auto Lock Settings**\n\n"
         f"Schedule: 01:00 AM - 06:00 AM\n"
         f"Status: {status_text}"
     )
