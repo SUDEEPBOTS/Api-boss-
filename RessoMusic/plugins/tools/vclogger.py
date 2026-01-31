@@ -2,14 +2,14 @@ import asyncio
 from logging import getLogger
 from typing import Dict, Set
 import random
+from html import escape # Name safe karne ke liye
 
-from pyrogram import filters
+from pyrogram import filters, enums
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from pyrogram.raw import functions
 
 # --- Project Imports ---
 from RessoMusic import app
-# Note: Ye line check kar lena, agar tere bot me get_assistant alag jagah hai to path badal dena
 from RessoMusic.utils.database import get_assistant
 from RessoMusic.misc import mongodb, SUDOERS
 
@@ -23,12 +23,11 @@ vc_logging_status: Dict[int, bool] = {}
 
 prefixes = ["/", "!", ".", ",", "?", "@", "#"]
 
-# --- HELPER: ADMIN CHECK (Old Version Safe) ---
+# --- HELPER: ADMIN CHECK ---
 async def is_admin(chat_id, user_id):
     if user_id in SUDOERS: return True
     try:
         member = await app.get_chat_member(chat_id, user_id)
-        # Using Strings instead of Enums for Old Version Compatibility
         if member.status in ["creator", "administrator"]:
             return True
     except:
@@ -37,20 +36,18 @@ async def is_admin(chat_id, user_id):
 
 # --- DATABASE FUNCTIONS ---
 async def load_vc_logger_status():
+    # Sirf unko load karenge jinhone manually "OFF" kiya hai
+    # Baaki sabke liye Default ON rahega
     try:
         cursor = vcloggerdb.find({})
-        enabled_chats = []
         async for doc in cursor:
             chat_id = doc["chat_id"]
             status = doc["status"]
             vc_logging_status[chat_id] = status
             if status:
-                enabled_chats.append(chat_id)
+                asyncio.create_task(check_and_monitor_vc(chat_id))
         
-        for chat_id in enabled_chats:
-            asyncio.create_task(check_and_monitor_vc(chat_id))
-        
-        LOGGER.info(f"Loaded VC logger for {len(enabled_chats)} chats.")
+        LOGGER.info(f"Loaded VC logger status.")
     except Exception as e:
         LOGGER.error(f"Error loading VC logger: {e}")
 
@@ -61,12 +58,16 @@ async def save_vc_logger_status(chat_id: int, status: bool):
             {"$set": {"chat_id": chat_id, "status": status}},
             upsert=True
         )
+        vc_logging_status[chat_id] = status
     except Exception as e:
         LOGGER.error(f"Error saving VC logger: {e}")
 
 async def get_vc_logger_status(chat_id: int) -> bool:
+    # Logic: Agar Memory mein status hai, to wo return karo
     if chat_id in vc_logging_status:
         return vc_logging_status[chat_id]
+
+    # Database check
     try:
         doc = await vcloggerdb.find_one({"chat_id": chat_id})
         if doc:
@@ -75,30 +76,22 @@ async def get_vc_logger_status(chat_id: int) -> bool:
             return status
     except:
         pass
-    return False
-
-# --- SMALL CAPS HELPER ---
-def to_small_caps(text):
-    mapping = {
-        "a":"ᴀ","b":"ʙ","c":"ᴄ","d":"ᴅ","e":"ᴇ","f":"ꜰ","g":"ɢ","h":"ʜ","i":"ɪ","j":"ᴊ",
-        "k":"ᴋ","l":"ʟ","m":"ᴍ","n":"ɴ","o":"ᴏ","p":"ᴘ","q":"ǫ","r":"ʀ","s":"s","t":"ᴛ",
-        "u":"ᴜ","v":"ᴠ","w":"ᴡ","x":"x","y":"ʏ","z":"ᴢ"
-    }
-    return "".join(mapping.get(c, c) for c in text.lower())
+    
+    # DEFAULT IS ON (Agar database mein kuch nahi mila to TRUE maano)
+    return True
 
 # --- COMMAND: /vclogger ---
 @app.on_message(filters.command(["vclogger", "vclog"], prefixes=prefixes) & filters.group)
 async def vclogger_command(_, message: Message):
     chat_id = message.chat.id
     
-    # Check Admin
     if not await is_admin(chat_id, message.from_user.id):
         return await message.reply_text("❌ You are not an Admin.")
 
     args = message.text.split()
     status = await get_vc_logger_status(chat_id)
     
-    status_text = "ENABLED" if status else "DISABLED"
+    status_text = "ENABLED (Default)" if status else "DISABLED"
 
     if len(args) == 1:
         await message.reply_text(
@@ -108,13 +101,11 @@ async def vclogger_command(_, message: Message):
     elif len(args) >= 2:
         arg = args[1].lower()
         if arg in ["on", "enable", "yes"]:
-            vc_logging_status[chat_id] = True
             await save_vc_logger_status(chat_id, True)
-            await message.reply_text(f"✅ **VC Logging Enabled!**\nI will now notify when someone joins/leaves.")
+            await message.reply_text(f"✅ **VC Logging Enabled!**")
             asyncio.create_task(check_and_monitor_vc(chat_id))
         
         elif arg in ["off", "disable", "no"]:
-            vc_logging_status[chat_id] = False
             await save_vc_logger_status(chat_id, False)
             await message.reply_text(f"🚫 **VC Logging Disabled.**")
             active_vc_chats.discard(chat_id)
@@ -122,7 +113,7 @@ async def vclogger_command(_, message: Message):
         else:
             await message.reply_text("❌ Use `on` or `off`.")
 
-# --- VC PARTICIPANT FETCHER (RAW) ---
+# --- VC PARTICIPANT FETCHER ---
 async def get_group_call_participants(userbot, peer):
     try:
         full_chat = await userbot.invoke(functions.channels.GetFullChannel(channel=peer))
@@ -135,7 +126,6 @@ async def get_group_call_participants(userbot, peer):
         ))
         return participants.participants
     except Exception as e:
-        # Handling FloodWait
         if "420" in str(e):
             await asyncio.sleep(5)
             return await get_group_call_participants(userbot, peer)
@@ -154,7 +144,6 @@ async def monitor_vc_chat(chat_id):
             
             new_users = set()
             for p in participants_list:
-                # Raw Update handling
                 if hasattr(p, 'peer') and hasattr(p.peer, 'user_id'):
                     new_users.add(p.peer.user_id)
 
@@ -174,15 +163,14 @@ async def monitor_vc_chat(chat_id):
             vc_active_users[chat_id] = new_users
 
         except Exception as e:
-            pass # Silent fail to avoid log spam
-
+            pass
         await asyncio.sleep(5)
 
 async def check_and_monitor_vc(chat_id):
+    # Default ON logic handle karne ke liye yahan check karte hain
     if not await get_vc_logger_status(chat_id):
         return
     
-    # Check if assistant exists
     try:
         userbot = await get_assistant(chat_id)
         if not userbot: return
@@ -196,21 +184,41 @@ async def check_and_monitor_vc(chat_id):
     except Exception as e:
         LOGGER.error(f"Error check_and_monitor_vc: {e}")
 
-# --- NOTIFICATION HANDLERS ---
+# --- BUTTONS & FORMATTING ---
+
 def get_stop_button():
     return InlineKeyboardMarkup(
         [[InlineKeyboardButton("🔕 ᴅɪsᴀʙʟᴇ ʟᴏɢs", callback_data="stop_vclogger")]]
     )
 
+# Function to clean bad names
+def clean_name_link(name, user_id):
+    # 1. HTML Escape (Fixes < > & issues)
+    safe_name = escape(name)
+    # 2. Limit Length (Agar naam 25 se bada hai to kaat do)
+    if len(safe_name) > 25:
+        safe_name = safe_name[:25] + "..."
+    
+    # 3. HTML Link Return
+    return f'<a href="tg://user?id={user_id}">{safe_name}</a>'
+
 async def handle_user_join(chat_id, user_id, userbot):
     try:
         user = await userbot.get_users(user_id)
         name = user.first_name or "User"
-        mention = f"[{name}](tg://user?id={user_id})"
+        
+        # New HTML Style Mention (Fixes broken format)
+        mention = clean_name_link(name, user_id)
         
         msg = f"🎤 {mention} **joined the Voice Chat!**"
         
-        sent_msg = await app.send_message(chat_id, msg, reply_markup=get_stop_button())
+        # Parse Mode HTML use kar rahe hain taaki link na tute
+        sent_msg = await app.send_message(
+            chat_id, 
+            msg, 
+            reply_markup=get_stop_button(),
+            parse_mode=enums.ParseMode.HTML 
+        )
         asyncio.create_task(delete_after_delay(sent_msg, 10))
     except Exception as e:
         pass
@@ -219,11 +227,18 @@ async def handle_user_leave(chat_id, user_id, userbot):
     try:
         user = await userbot.get_users(user_id)
         name = user.first_name or "User"
-        mention = f"[{name}](tg://user?id={user_id})"
+        
+        # New HTML Style Mention
+        mention = clean_name_link(name, user_id)
         
         msg = f"👋 {mention} **left the Voice Chat.**"
         
-        sent_msg = await app.send_message(chat_id, msg, reply_markup=get_stop_button())
+        sent_msg = await app.send_message(
+            chat_id, 
+            msg, 
+            reply_markup=get_stop_button(),
+            parse_mode=enums.ParseMode.HTML
+        )
         asyncio.create_task(delete_after_delay(sent_msg, 10))
     except Exception as e:
         pass
@@ -235,7 +250,7 @@ async def delete_after_delay(message, delay):
     except:
         pass
 
-# --- CALLBACK: DISABLE BUTTON ---
+# --- CALLBACK ---
 @app.on_callback_query(filters.regex("stop_vclogger"))
 async def stop_vclogger_callback(_, query: CallbackQuery):
     chat_id = query.message.chat.id
@@ -258,7 +273,7 @@ async def stop_vclogger_callback(_, query: CallbackQuery):
 async def initialize_vc_logger():
     await load_vc_logger_status()
 
-# Start Logic (Standard for Music Bots)
+# Start Loop
 loop = asyncio.get_event_loop()
 loop.create_task(initialize_vc_logger())
-
+        
