@@ -9,7 +9,9 @@ from pyrogram.types import (
 )
 from RessoMusic import app
 from RessoMusic.utils import extract_user
-from config import BANNED_USERS, SUDOERS
+# Fix: SUDOERS ko RessoMusic.misc se import kiya
+from RessoMusic.misc import SUDOERS
+from config import BANNED_USERS
 
 # Define prefixes (/, !, .)
 COMMAND_PREFIXES = ["/", "!", "."]
@@ -256,3 +258,4 @@ async def unmute_user(client, message: Message):
         await message.reply_text(f"🔊 **Unmuted!**\n👤 **User:** {user.mention}")
     except Exception as e:
         await message.reply_text(f"❌ **Error:** `{e}`")
+                
