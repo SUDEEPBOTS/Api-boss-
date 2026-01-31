@@ -9,7 +9,6 @@ from pyrogram.types import (
 )
 from RessoMusic import app
 from RessoMusic.utils import extract_user
-# Fix: SUDOERS ko RessoMusic.misc se import kiya
 from RessoMusic.misc import SUDOERS
 from config import BANNED_USERS
 
@@ -72,14 +71,10 @@ async def verify_anonymous_admin(client, callback_query: CallbackQuery):
 # --- PROMOTE ---
 @app.on_message(filters.command(["promote"], prefixes=COMMAND_PREFIXES) & filters.group & ~BANNED_USERS)
 async def promote_user(client, message: Message):
-    # 1. Check Anonymous
     if await check_anonymous(message): return
-    
-    # 2. Check Permissions (Normal User Block)
     if not await is_admin_or_sudo(message.chat.id, message.from_user.id):
         return await message.reply_text("❌ **You don't have permissions to use this command!**")
 
-    # 3. Main Logic
     user = await extract_user(message)
     if not user:
         return await message.reply_text("❌ **User not found.**")
@@ -220,9 +215,14 @@ async def mute_user(client, message: Message):
         return await message.reply_text("❌ **I don't have permission to restrict users!**")
 
     try:
+        # SAFE PERMISSIONS for Old Version
         await message.chat.restrict_member(
             user.id,
-            permissions=ChatPermissions(can_send_messages=False)
+            permissions=ChatPermissions(
+                can_send_messages=False,
+                can_send_media_messages=False,
+                can_send_other_messages=False
+            )
         )
         await message.reply_text(f"🔇 **Muted!**\n👤 **User:** {user.mention}")
     except Exception as e:
@@ -245,6 +245,7 @@ async def unmute_user(client, message: Message):
         return await message.reply_text("❌ **I don't have permission to restrict users!**")
 
     try:
+        # SAFE PERMISSIONS for Old Version
         await message.chat.restrict_member(
             user.id,
             permissions=ChatPermissions(
@@ -252,10 +253,12 @@ async def unmute_user(client, message: Message):
                 can_send_media_messages=True,
                 can_send_other_messages=True,
                 can_send_polls=True,
-                can_invite_users=True
+                can_invite_users=True,
+                can_pin_messages=False,
+                can_change_info=False
             )
         )
         await message.reply_text(f"🔊 **Unmuted!**\n👤 **User:** {user.mention}")
     except Exception as e:
         await message.reply_text(f"❌ **Error:** `{e}`")
-                
+    
