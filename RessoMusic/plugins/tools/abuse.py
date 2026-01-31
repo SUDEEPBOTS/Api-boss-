@@ -11,6 +11,9 @@ abusedb = mongodb.abuse_cache
 local_abuse_cache = []
 disable_abuse_check = []
 
+# Whitelist for Approved Users (In-Memory)
+abuse_whitelist = []
+
 # Deleted Messages Store (For Popup)
 deleted_msg_store = {}
 
@@ -72,30 +75,94 @@ async def check_abuse_with_ai(text):
         print(f"Groq API Error: {e}")
         return False
 
-# --- MAIN ABUSE WATCHER ---
+# ====================================================
+#                 COMMANDS SECTION
+# ====================================================
+
+# 1. APPROVE USER COMMAND (Reply to user)
+@app.on_message(filters.command(["approve", "unmute", "allow"]) & filters.group & ~BANNED_USERS)
+async def approve_user_command(client, message: Message):
+    if not await is_admin_or_sudo(message.chat.id, message.from_user.id):
+        return await message.reply_text("❌ Admins Only!")
+
+    if not message.reply_to_message or not message.reply_to_message.from_user:
+        return await message.reply_text("⚠️ **Reply to a user to approve them.**")
+
+    target_user_id = message.reply_to_message.from_user.id
+    user_name = message.reply_to_message.from_user.first_name
+
+    if target_user_id not in abuse_whitelist:
+        abuse_whitelist.append(target_user_id)
+        await message.reply_text(f"✅ **{user_name} is now Approved!**\nBot will ignore abuse from this user.")
+    else:
+        await message.reply_text(f"ℹ️ **{user_name}** is already approved.")
+
+# 2. CLEAR WHITELIST COMMAND
+@app.on_message(filters.command(["clearapprove", "resetapprove"]) & filters.group & ~BANNED_USERS)
+async def clear_abuse_whitelist(client, message: Message):
+    if not await is_admin_or_sudo(message.chat.id, message.from_user.id):
+        return await message.reply_text("❌ Admins Only!")
+    
+    abuse_whitelist.clear()
+    await message.reply_text("🔄 **Approved List Cleared!**\nEveryone will be checked for abuse now.")
+
+# 3. TOGGLE ABUSE CHECK (ON/OFF)
+@app.on_message(filters.command(["abuse", "antiabuse"]) & filters.group & ~BANNED_USERS)
+async def abuse_toggle_command(client, message: Message):
+    if not await is_admin_or_sudo(message.chat.id, message.from_user.id):
+        return await message.reply_text("❌ Admins Only!")
+    
+    if len(message.command) != 2:
+        return await message.reply_text("⚠️ Usage: `/abuse on` or `/abuse off`")
+    
+    state = message.command[1].lower()
+    chat_id = message.chat.id
+
+    if state == "off":
+        if chat_id not in disable_abuse_check:
+            disable_abuse_check.append(chat_id)
+            await message.reply_text("✅ **Abuse Check Disabled.**")
+        else:
+            await message.reply_text("ℹ️ Already **OFF**.")
+    elif state == "on":
+        if chat_id in disable_abuse_check:
+            disable_abuse_check.remove(chat_id)
+            await message.reply_text("✅ **Abuse Check Enabled.**")
+        else:
+            await message.reply_text("ℹ️ Already **ON**.")
+
+# ====================================================
+#                 WATCHER SECTION
+# ====================================================
+
 @app.on_message(filters.group & filters.text & ~BANNED_USERS, group=70)
 async def abuse_watcher(client, message: Message):
     chat_id = message.chat.id
     text = message.text
     
+    # 0. Basic Checks
     if chat_id in disable_abuse_check: return
     if not text or len(text) > 200: return 
     if not message.from_user: return
     
-    # Sudo/Admin Ignore
-    if await is_admin_or_sudo(chat_id, message.from_user.id):
+    user_id = message.from_user.id
+
+    # 1. Ignore Admins & Approved Users
+    if await is_admin_or_sudo(chat_id, user_id):
+        return
+    if user_id in abuse_whitelist:
         return
 
     is_abusive = False
     text_lower = text.lower()
 
-    # 1. Check Local Cache
+    # 2. Check Local Cache
     for bad_word in local_abuse_cache:
         if bad_word in text_lower:
             is_abusive = True
             break
     
-    # 2. Check AI
+    # 3. Check AI
     if not is_abusive:
         is_abusive = await check_abuse_with_ai(text)
         if is_abusive:
@@ -104,7 +171,7 @@ async def abuse_watcher(client, message: Message):
                 # DB me save karo future ke liye
                 await abusedb.insert_one({"word": text_lower})
 
-    # 3. Action
+    # 4. Action
     if is_abusive:
         deleted_msg_store[message.id] = text
 
@@ -115,19 +182,20 @@ async def abuse_watcher(client, message: Message):
 
         bot_username = (await app.get_me()).username
         
+        # ADDED APPROVE BUTTON HERE
         buttons = InlineKeyboardMarkup([
             [
-                InlineKeyboardButton("👁️ sʜᴏᴡ ᴍᴇssᴀɢᴇ", callback_data=f"sh_ab|{message.id}"),
-                InlineKeyboardButton("ᴛᴇᴍᴘ ᴏғғ", callback_data=f"abuse_off|{chat_id}")
+                InlineKeyboardButton("✅ ᴀᴘᴘʀᴏᴠᴇ", callback_data=f"abuse_allow|{user_id}"),
+                InlineKeyboardButton("👁️ sʜᴏᴡ", callback_data=f"sh_ab|{message.id}")
             ],
             [
-                InlineKeyboardButton("➕ ᴀᴅᴅ ᴍᴇ", url=f"https://t.me/{bot_username}?startgroup=true")
+                InlineKeyboardButton("🔕 ᴛᴇᴍᴘ ᴏғғ", callback_data=f"abuse_off|{chat_id}")
             ]
         ])
 
         user_name = message.from_user.first_name
         sc_user = to_small_caps(user_name)
-        sc_msg = to_small_caps("Your message was deleted due to abusive words.")
+        sc_msg = to_small_caps("Message deleted due to abusive words.")
 
         warn_text = (
             f">🚫 {sc_user}\n"
@@ -136,35 +204,42 @@ async def abuse_watcher(client, message: Message):
 
         await message.reply_text(warn_text, reply_markup=buttons)
 
-# --- CALLBACKS ---
-@app.on_callback_query(filters.regex("abuse_off") & ~BANNED_USERS)
-async def abuse_off_cb(client, callback_query: CallbackQuery):
+# ====================================================
+#                 CALLBACKS SECTION
+# ====================================================
+
+@app.on_callback_query(filters.regex("^(abuse_off|sh_ab|abuse_allow)") & ~BANNED_USERS)
+async def abuse_callbacks(client, callback_query: CallbackQuery):
     if not await is_admin_or_sudo(callback_query.message.chat.id, callback_query.from_user.id):
         return await callback_query.answer("❌ Admins Only!", show_alert=True)
 
-    chat_id = int(callback_query.data.split("|")[1])
-    
-    if chat_id not in disable_abuse_check:
-        disable_abuse_check.append(chat_id)
-        await callback_query.answer("Disabled!", show_alert=True)
-        await callback_query.message.edit_text(f">✅ {to_small_caps('Abuse Filter Disabled')}")
-    else:
-        await callback_query.answer("Already Disabled!", show_alert=True)
+    data = callback_query.data.split("|")
+    action = data[0]
+    target_id = int(data[1])
 
-@app.on_callback_query(filters.regex("sh_ab") & ~BANNED_USERS)
-async def show_abuse_text(client, callback_query: CallbackQuery):
-    if not await is_admin_or_sudo(callback_query.message.chat.id, callback_query.from_user.id):
-        return await callback_query.answer("❌ Only Admins can see this.", show_alert=True)
+    # 1. ALLOW USER
+    if action == "abuse_allow":
+        if target_id not in abuse_whitelist:
+            abuse_whitelist.append(target_id)
+            await callback_query.answer("User Approved!", show_alert=True)
+            await callback_query.message.edit_text(f">✅ {to_small_caps('User Approved. No more checks.')}")
+        else:
+            await callback_query.answer("Already Approved!", show_alert=True)
 
-    try:
-        msg_id = int(callback_query.data.split("|")[1])
-        original_text = deleted_msg_store.get(msg_id)
-        
+    # 2. TURN OFF FOR GROUP
+    elif action == "abuse_off":
+        if target_id not in disable_abuse_check:
+            disable_abuse_check.append(target_id)
+            await callback_query.answer("Disabled!", show_alert=True)
+            await callback_query.message.edit_text(f">✅ {to_small_caps('Abuse Filter Disabled')}")
+        else:
+            await callback_query.answer("Already Disabled!", show_alert=True)
+
+    # 3. SHOW MESSAGE
+    elif action == "sh_ab":
+        original_text = deleted_msg_store.get(target_id)
         if original_text:
             await callback_query.answer(f"🤬 User Wrote:\n\n{original_text[:190]}", show_alert=True)
         else:
             await callback_query.answer("❌ Message expired.", show_alert=True)
             
-    except:
-        await callback_query.answer("❌ Error.", show_alert=True)
-  
