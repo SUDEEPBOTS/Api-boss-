@@ -4,7 +4,6 @@ from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, Message, 
 from RessoMusic import app
 from RessoMusic.misc import SUDOERS
 from config import BANNED_USERS
-from RessoMusic.utils.admin import actual_admin_cb
 
 # Feature ko disable karne ke liye list
 disable_bio_check = []
@@ -21,7 +20,7 @@ def to_small_caps(text):
     }
     return "".join(chars.get(c, c) for c in text)
 
-# --- FUNCTION TO CHECK ADMIN STATUS ---
+# --- HELPER: CHECK IF USER IS ADMIN/SUDO (For Messages) ---
 async def is_admin_or_sudo(chat_id, user_id):
     if user_id in SUDOERS:
         return True
@@ -33,6 +32,25 @@ async def is_admin_or_sudo(chat_id, user_id):
         pass
     return False
 
+# --- HELPER: CHECK IF USER IS ADMIN/SUDO (For Buttons) ---
+async def check_cb_admin(client, callback_query):
+    user_id = callback_query.from_user.id
+    chat_id = callback_query.message.chat.id
+    
+    if user_id in SUDOERS:
+        return True
+    
+    try:
+        member = await client.get_chat_member(chat_id, user_id)
+        if member.status in [enums.ChatMemberStatus.ADMINISTRATOR, enums.ChatMemberStatus.OWNER]:
+            return True
+        else:
+            await callback_query.answer("❌ You are not an Admin!", show_alert=True)
+            return False
+    except:
+        await callback_query.answer("❌ Error checking rights.", show_alert=True)
+        return False
+
 # --- FEATURE 1: EDIT MESSAGE MONITOR ---
 @app.on_edited_message(filters.group & ~BANNED_USERS)
 async def edit_watcher(client, message: Message):
@@ -43,11 +61,11 @@ async def edit_watcher(client, message: Message):
     if await is_admin_or_sudo(message.chat.id, message.from_user.id):
         return
 
-    # Warning Text Prepare karna (Blockquote Fixed)
+    # Warning Text Prepare karna
     user_name = message.from_user.first_name
     sc_user = to_small_caps(user_name)
     
-    # Ek hi string me bina space ke newlines lagaye hain taaki quote na tute
+    # Text formatting
     text = (
         f">⚠️ **{to_small_caps('Editing Not Allowed')}**\n"
         f">👤 **{to_small_caps('User')}:** {sc_user}\n"
@@ -57,14 +75,14 @@ async def edit_watcher(client, message: Message):
     # Warning bhejna
     warning_msg = await message.reply_text(text)
     
-    # 3 Minute (180 seconds) Wait karna
+    # 3 Minute Wait karna
     await asyncio.sleep(180)
     
-    # Ab Dono delete honge (User Msg + Bot Warning)
+    # Ab Dono delete honge
     try:
         await message.delete() # User ka msg delete
     except:
-        pass # Agar msg pehle hi delete ho gaya ho
+        pass 
         
     try:
         await warning_msg.delete() # Bot ka msg delete
@@ -109,7 +127,6 @@ async def bio_link_checker(client, message: Message):
             user_name = message.from_user.first_name
             sc_user = to_small_caps(user_name)
 
-            # Blockquote formatting fixed
             text = (
                 f">🚫 **{to_small_caps('Anti-Promotion')}**\n"
                 f">👤 **{to_small_caps('User')}:** {sc_user}\n"
@@ -125,7 +142,8 @@ async def bio_link_checker(client, message: Message):
 # --- BUTTON CALLBACKS ---
 @app.on_callback_query(filters.regex("bio_check_off") & ~BANNED_USERS)
 async def bio_off_callback(client, callback_query: CallbackQuery):
-    if not await actual_admin_cb(client, callback_query):
+    # Local check function use kar rahe hain ab
+    if not await check_cb_admin(client, callback_query):
         return
 
     chat_id = int(callback_query.data.split("|")[1])
@@ -141,7 +159,7 @@ async def bio_off_callback(client, callback_query: CallbackQuery):
 
 @app.on_callback_query(filters.regex("close_data"))
 async def close_callback(client, callback_query: CallbackQuery):
-    if not await actual_admin_cb(client, callback_query):
+    if not await check_cb_admin(client, callback_query):
         return
     await callback_query.message.delete()
-  
+    
