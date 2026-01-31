@@ -8,21 +8,6 @@ from config import BANNED_USERS
 # List to store disabled chats (Temporary Memory)
 disable_bio_check = []
 
-# --- SMALL CAPS CONVERTER FUNCTION ---
-def to_small_caps(text):
-    if not text:
-        return ""
-    chars = {
-        'a': 'ᴀ', 'b': 'ʙ', 'c': 'ᴄ', 'd': 'ᴅ', 'e': 'ᴇ', 'f': 'ғ', 'g': 'ɢ', 'h': 'ʜ', 'i': 'ɪ', 'j': 'ᴊ', 
-        'k': 'ᴋ', 'l': 'ʟ', 'm': 'ᴍ', 'n': 'ɴ', 'o': 'ᴏ', 'p': 'ᴘ', 'q': 'ǫ', 'r': 'ʀ', 's': 's', 't': 'ᴛ', 
-        'u': 'ᴜ', 'v': 'ᴠ', 'w': 'ᴡ', 'x': 'x', 'y': 'ʏ', 'z': 'ᴢ',
-        '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄', '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉',
-        'A': 'ᴀ', 'B': 'ʙ', 'C': 'ᴄ', 'D': 'ᴅ', 'E': 'ᴇ', 'F': 'ғ', 'G': 'ɢ', 'H': 'ʜ', 'I': 'ɪ', 'J': 'ᴊ', 
-        'K': 'ᴋ', 'L': 'ʟ', 'M': 'ᴍ', 'N': 'ɴ', 'O': 'ᴏ', 'P': 'ᴘ', 'Q': 'ǫ', 'R': 'ʀ', 'S': 's', 'T': 'ᴛ', 
-        'U': 'ᴜ', 'V': 'ᴠ', 'W': 'ᴡ', 'X': 'x', 'Y': 'ʏ', 'Z': 'ᴢ'
-    }
-    return "".join(chars.get(c, c) for c in text)
-
 # --- HELPER: CHECK IF USER IS ADMIN/SUDO ---
 async def is_admin_or_sudo(chat_id, user_id):
     if user_id in SUDOERS:
@@ -43,7 +28,7 @@ async def bio_command_handler(client, message: Message):
         return await message.reply_text("❌ You are not an Admin.")
 
     if len(message.command) != 2:
-        return await message.reply_text("⚠️ Usage:\n`/bio on` - Enable Bio Check\n`/bio off` - Disable Bio Check")
+        return await message.reply_text("⚠️ **Usage:**\n`/bio on` - Enable Bio Check\n`/bio off` - Disable Bio Check")
 
     state = message.command[1].lower()
     chat_id = message.chat.id
@@ -51,16 +36,16 @@ async def bio_command_handler(client, message: Message):
     if state == "off":
         if chat_id not in disable_bio_check:
             disable_bio_check.append(chat_id)
-            await message.reply_text(f">✅ {to_small_caps('Bio Check Disabled')}")
+            await message.reply_text("✅ **Bio Check Disabled**")
         else:
-            await message.reply_text("ℹ️ Bio Check is already OFF.")
+            await message.reply_text("ℹ️ Bio Check is already **OFF**.")
     
     elif state == "on":
         if chat_id in disable_bio_check:
             disable_bio_check.remove(chat_id)
-            await message.reply_text(f">✅ {to_small_caps('Bio Check Enabled')}")
+            await message.reply_text("✅ **Bio Check Enabled**")
         else:
-            await message.reply_text("ℹ️ Bio Check is already ON.")
+            await message.reply_text("ℹ️ Bio Check is already **ON**.")
     
     else:
         await message.reply_text("⚠️ Invalid Command. Use `on` or `off`.")
@@ -72,30 +57,23 @@ async def edit_watcher(client, message: Message):
     if not message.from_user:
         return
 
+    # REACTION FIX: Agar message me text ya caption nahi hai (sirf reaction update hai), to return
+    if not message.text and not message.caption:
+        return
+
     # Check Admin/Sudo (Ignore them)
     if await is_admin_or_sudo(message.chat.id, message.from_user.id):
         return
 
-    # Name & Username Fetching
-    fname = message.from_user.first_name
-    username = message.from_user.username
+    # Name & Username Formatting
+    user_mention = message.from_user.mention  # Ye Blue color name dega
+    username = f"(@{message.from_user.username})" if message.from_user.username else ""
     
-    display_name = fname
-    if username:
-        display_name = f"{fname} (@{username})"
-    
-    sc_user = to_small_caps(display_name)
-
-    # Formatting (Stars Removed)
-    header = to_small_caps("Editing Not Allowed")
-    lbl_user = to_small_caps("User")
-    lbl_status = to_small_caps("Status")
-    lbl_msg = to_small_caps("Deleting in 3 mins...")
-    
+    # New Format (Bold, No Blockquote, No Small Caps)
     text = (
-        f">⚠️ {header}\n"
-        f">👤 {lbl_user}: {sc_user}\n"
-        f">⏳ {lbl_status}: {lbl_msg}"
+        f"⚠️ **Editing Not Allowed**\n"
+        f"👤 **User:** {user_mention} {username}\n"
+        f"⏳ **Status:** **Deleting in 3 mins...**"
     )
     
     # Send Warning
@@ -146,33 +124,21 @@ async def bio_link_checker(client, message: Message):
 
             buttons = InlineKeyboardMarkup([
                 [
-                    InlineKeyboardButton("🔕 ᴛᴜʀɴ ᴏғғ", callback_data=f"bio_check_off|{chat_id}"),
-                    InlineKeyboardButton("🗑️ ɪɢɴᴏʀᴇ", callback_data="close_data")
+                    InlineKeyboardButton("🔕 Turn Off", callback_data=f"bio_check_off|{chat_id}"),
+                    InlineKeyboardButton("🗑️ Ignore", callback_data="close_data")
                 ]
             ])
 
-            # Name & Username Fetching
-            fname = message.from_user.first_name
-            username = message.from_user.username
-            
-            display_name = fname
-            if username:
-                display_name = f"{fname} (@{username})"
-            
-            sc_user = to_small_caps(display_name)
+            # Name & Username Formatting
+            user_mention = message.from_user.mention
+            username = f"(@{message.from_user.username})" if message.from_user.username else ""
 
-            # Formatting (Stars Removed)
-            header = to_small_caps("Anti-Promotion")
-            lbl_user = to_small_caps("User")
-            lbl_reason = to_small_caps("Reason")
-            reason_msg = to_small_caps("Link in Bio detected.")
-            lbl_action = to_small_caps("Remove link to chat here.")
-
+            # New Format (Bold, No Blockquote, No Small Caps)
             text = (
-                f">🚫 {header}\n"
-                f">👤 {lbl_user}: {sc_user}\n"
-                f">⚠️ {lbl_reason}: {reason_msg}\n"
-                f">❗ {lbl_action}"
+                f"🚫 **Anti-Promotion**\n"
+                f"👤 **User:** {user_mention} {username}\n"
+                f"⚠️ **Reason:** **Link in Bio detected.**\n"
+                f"❗ **Remove link to chat here.**"
             )
 
             await message.reply_text(text, reply_markup=buttons)
@@ -195,9 +161,8 @@ async def bio_off_callback(client, callback_query: CallbackQuery):
     
     if chat_id_val not in disable_bio_check:
         disable_bio_check.append(chat_id_val)
-        msg_text = to_small_caps("Bio Check Disabled")
         await callback_query.answer("Disabled!", show_alert=True)
-        await callback_query.message.edit_text(f">✅ {msg_text}")
+        await callback_query.message.edit_text("✅ **Bio Check Disabled**")
     else:
         await callback_query.answer("Already Disabled!", show_alert=True)
 
