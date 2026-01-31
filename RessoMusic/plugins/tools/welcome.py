@@ -1,3 +1,4 @@
+import html
 from pyrogram import filters, enums
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, Message
 from RessoMusic import app
@@ -17,19 +18,24 @@ def to_small_caps(text):
 async def welcome_new_members(client, message: Message):
     chat = message.chat
     
+    # Bot username ek baar hi fetch kar lo loop se bahar
     try:
-        bot_username = (await client.get_me()).username
+        bot = await client.get_me()
+        bot_username = bot.username
+        bot_id = bot.id
     except:
         bot_username = "RessoMusicBot"
+        bot_id = 0
 
     for member in message.new_chat_members:
         try:
-            # Ignore Bot itself
-            if member.id == (await client.get_me()).id:
+            # Agar Bot khud add hua hai to ignore kare
+            if member.id == bot_id:
                 continue
 
             user_id = member.id
-            first_name = member.first_name
+            # HTML Escape zaroori hai taaki naam me < > ho to crash na ho
+            first_name = html.escape(member.first_name or "User")
             
             if member.username:
                 username = f"@{member.username}"
@@ -38,7 +44,7 @@ async def welcome_new_members(client, message: Message):
             
             # HTML Name Link
             mention = f"<a href='tg://user?id={user_id}'>{first_name}</a>"
-            chat_title = chat.title
+            chat_title = html.escape(chat.title)
 
             # --- STYLISH LABELS ---
             header = to_small_caps("welcome to")
@@ -74,5 +80,6 @@ async def welcome_new_members(client, message: Message):
             )
 
         except Exception as e:
-            pass
-          
+            # Error print karega taaki logs me dikhe agar koi dikkat ho
+            print(f"[Welcome Error]: {e}")
+            
