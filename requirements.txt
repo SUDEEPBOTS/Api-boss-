@@ -31,4 +31,5 @@ bs4
 telegraph
 pyrogram
 TgCrypto
+groq
 
