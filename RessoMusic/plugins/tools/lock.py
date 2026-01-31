@@ -15,7 +15,7 @@ TIMEZONE = pytz.timezone("Asia/Kolkata")
 LOCK_HOUR = 1   # 1 AM
 UNLOCK_HOUR = 6 # 6 AM
 
-# --- PERMISSIONS (FIXED FOR NEW UPDATE) ---
+# --- PERMISSIONS (ADVANCED - Works on Pyrogram v2+) ---
 
 # 1. Lock Mode (1 AM - 6 AM): SAB BAND
 LOCK_PERMISSIONS = ChatPermissions(
@@ -200,4 +200,4 @@ async def close_callback(client, callback_query: CallbackQuery):
         await callback_query.message.delete()
     except:
         pass
-        
+    
