@@ -55,7 +55,7 @@ PRIVACY_LINK = getenv("PRIVACY_LINK", "https://files.catbox.moe/jyeumn.jpg")
 
 # 🔥 NEW: MUSIC API CONFIGURATION (Added this for youtube.py)
 # Default URL maine aapki wali daal di hai
-MUSIC_API_URL = getenv("MUSIC_API_URL", "https://fastapi2-wdtl.onrender.com")
+MUSIC_API_URL = getenv("MUSIC_API_URL", "https://yukiapi.site")
 MUSIC_API_KEY = getenv("MUSIC_API_KEY", None)
 
 
@@ -128,5 +128,6 @@ if SUPPORT_GROUP:
             "[ERROR] - Your SUPPORT_GROUP url is wrong. Please ensure that it starts with https://"
 )
         
+
 
 
