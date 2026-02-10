@@ -2,6 +2,8 @@ import math
 from pyrogram.types import InlineKeyboardButton
 from RessoMusic.utils.formatters import time_to_seconds
 
+# ⚠️ NOTE: Ye feature tabhi chalega jab tumhari Pyrogram Library updated ho.
+# Update command: pip install -U pyrogram tgcrypto
 
 def track_markup(_, videoid, user_id, channel, fplay):
     buttons = [
@@ -12,7 +14,10 @@ def track_markup(_, videoid, user_id, channel, fplay):
         [
             InlineKeyboardButton("˹ᴀɴɪʏᴀ ᴛᴜɴᴇs˼♪", url="https://yukiapp-steel.vercel.app/"),
         ],
-        [InlineKeyboardButton(text=_["CLOSE_BUTTON"], callback_data="close")],
+        [
+            # Close button ko RED (Destructive) kar diya
+            InlineKeyboardButton(text=_["CLOSE_BUTTON"], callback_data="close", style="destructive")
+        ],
     ]
     return buttons
 
@@ -27,13 +32,25 @@ def stream_markup(_, chat_id):
             InlineKeyboardButton("˹ᴀɴɪʏᴀ ᴛᴜɴᴇs˼♪", url="https://yukiapp-steel.vercel.app/"),
         ],
         [
-            InlineKeyboardButton(text="▷", callback_data=f"ADMIN Resume|{chat_id}"),
-            InlineKeyboardButton(text="II", callback_data=f"ADMIN Pause|{chat_id}"),
+            # 🔵 Resume = Primary (Blue/Main)
+            InlineKeyboardButton(text="▷", callback_data=f"ADMIN Resume|{chat_id}", style="primary"),
+            
+            # 🔴 Pause = Destructive (Red/Warning)
+            InlineKeyboardButton(text="II", callback_data=f"ADMIN Pause|{chat_id}", style="destructive"),
+            
+            # ⚪ Replay = Default (Grey)
             InlineKeyboardButton(text="↻", callback_data=f"ADMIN Replay|{chat_id}"),
+            
+            # ⚪ Skip = Default (Grey)
             InlineKeyboardButton(text="‣‣I", callback_data=f"ADMIN Skip|{chat_id}"),
-            InlineKeyboardButton(text="▢", callback_data=f"ADMIN Stop|{chat_id}"),
+            
+            # 🔴 Stop = Destructive (Red/End)
+            InlineKeyboardButton(text="▢", callback_data=f"ADMIN Stop|{chat_id}", style="destructive"),
         ],
-        [InlineKeyboardButton(text=_["CLOSE_BUTTON"], callback_data="close")],
+        [
+            # 🔴 Close = Red
+            InlineKeyboardButton(text=_["CLOSE_BUTTON"], callback_data="close", style="destructive")
+        ],
     ]
     return buttons
 
@@ -54,6 +71,7 @@ def playlist_markup(_, videoid, user_id, ptype, channel, fplay):
             InlineKeyboardButton(
                 text=_["CLOSE_BUTTON"],
                 callback_data=f"forceclose {videoid}|{user_id}",
+                style="destructive"  # Red Close
             ),
         ],
     ]
@@ -66,12 +84,14 @@ def livestream_markup(_, videoid, user_id, mode, channel, fplay):
             InlineKeyboardButton(
                 text=_["P_B_3"],
                 callback_data=f"LiveStream {videoid}|{user_id}|{mode}|{channel}|{fplay}",
+                style="primary" # Live Stream button Blue
             ),
         ],
         [
             InlineKeyboardButton(
                 text=_["CLOSE_BUTTON"],
                 callback_data=f"forceclose {videoid}|{user_id}",
+                style="destructive" # Red Close
             ),
         ],
     ]
@@ -99,6 +119,7 @@ def slider_markup(_, videoid, user_id, query, query_type, channel, fplay):
             InlineKeyboardButton(
                 text=_["CLOSE_BUTTON"],
                 callback_data=f"forceclose {query}|{user_id}",
+                style="destructive" # Red Close
             ),
             InlineKeyboardButton(
                 text="▷",
@@ -107,3 +128,4 @@ def slider_markup(_, videoid, user_id, query, query_type, channel, fplay):
         ],
     ]
     return buttons
+    
