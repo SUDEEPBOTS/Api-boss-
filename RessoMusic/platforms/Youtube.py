@@ -1,7 +1,7 @@
 import asyncio
 import os
 import re
-import aiohttp  # Needed for API calls
+import aiohttp
 from typing import Union
 
 import yt_dlp
@@ -11,7 +11,7 @@ from youtubesearchpython.__future__ import VideosSearch
 
 from RessoMusic.utils.database import is_on_off
 from RessoMusic.utils.formatters import time_to_seconds
-from config import MUSIC_API_URL, MUSIC_API_KEY  # Ensure these exist in config
+from config import MUSIC_API_URL, MUSIC_API_KEY
 
 
 async def shell_cmd(cmd):
@@ -37,19 +37,21 @@ class YouTubeAPI:
         self.listbase = "https://youtube.com/playlist?list="
         self.reg = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
 
-    # 🔥 NEW: API CALL FUNCTION
-    async def get_api_video(self, query: str):
+    # 🔥 API CALL (Updated for Audio/Video selection)
+    async def get_api_video(self, query: str, stream_type: str = "audio"):
         if not MUSIC_API_URL:
             return None
-            
-        # Clean URL handling
+        
         base_url = MUSIC_API_URL.rstrip("/")
-        url = f"{base_url}/getvideo"
+        # Smartly choose endpoint
+        endpoint = "/getvideo" if stream_type == "video" else "/getaudio"
+        url = f"{base_url}{endpoint}"
+        
         params = {"query": query, "key": MUSIC_API_KEY}
 
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(url, params=params, timeout=10) as resp:
+                async with session.get(url, params=params, timeout=15) as resp:
                     if resp.status == 200:
                         data = await resp.json()
                         if data.get("status") == 200:
@@ -178,22 +180,24 @@ class YouTubeAPI:
             result = []
         return result
 
-    # 🔥 MODIFIED: TRACK FUNCTION (API FIRST, THEN FALLBACK)
+    # 🔥 TRACK FUNCTION (Updated for Smart Cache)
     async def track(self, link: str, videoid: Union[bool, str] = None):
-        # 1. Try API First if not direct video ID
+        # 1. Try API First
         if MUSIC_API_URL and not videoid and not "http" in link:
-            api_data = await self.get_api_video(link)
+            # Default to Audio (Fastest for Music)
+            # If you need video support here, pass stream_type="video"
+            api_data = await self.get_api_video(link, stream_type="audio")
+            
             if api_data:
-                # API Success
                 return {
                     "title": api_data["title"],
-                    "link": api_data["link"],  # Catbox URL
-                    "vidid": api_data["id"],   # Original YouTube ID for thumbnail
+                    "link": api_data["link"],  # API Direct Link
+                    "vidid": api_data["id"],
                     "duration_min": api_data["duration"],
                     "thumb": api_data["thumbnail"],
                 }, api_data["id"]
 
-        # 2. Local Fallback (Original Logic)
+        # 2. Local Fallback
         if videoid:
             link = self.base + link
         if "&" in link:
@@ -268,6 +272,7 @@ class YouTubeAPI:
         thumbnail = result[query_type]["thumbnails"][0]["url"].split("?")[0]
         return title, duration_min, thumbnail, vidid
 
+    # 🔥 SMART DOWNLOADER WITH GLOBAL CACHE
     async def download(
         self,
         link: str,
@@ -280,33 +285,38 @@ class YouTubeAPI:
         title: Union[bool, str] = None,
     ) -> str:
         
-        # 🔥 1. ARIA2 DOWNLOADER FOR DIRECT LINKS (CATBOX/API)
-        # Checks if link is direct (http) and NOT youtube
+        # 1. Determine Unique Filename (Global Cache)
+        # Use VideoID as name so multiple groups share the same file
+        if videoid:
+            if video or songvideo:
+                 filename = f"{videoid}.mp4"
+            else:
+                 filename = f"{videoid}.mp3"
+        else:
+            # Fallback (Safety)
+            filename = link.split("/")[-1].split("?")[0]
+            if not filename.endswith((".mp3", ".mp4")):
+                 filename = f"{filename}.mp3"
+
+        if not os.path.exists("downloads"):
+            os.makedirs("downloads")
+            
+        file_path = os.path.join("downloads", filename)
+
+        # 2. CACHE CHECK (The Speed Secret)
+        if os.path.exists(file_path):
+            print(f"🚀 Cache Hit: {file_path}")
+            return file_path, True
+
+        # 3. API / ARIA2 DOWNLOAD
         is_youtube = ("youtube.com" in link or "youtu.be" in link)
-        if "http" in link and not is_youtube and not videoid:
-            print(f"🚀 ARIA2: Downloading Direct Link -> {link}")
+        if "http" in link and not is_youtube:
+            print(f"🚀 ARIA2 MODE: Downloading -> {filename}")
             try:
-                if not os.path.exists("downloads"):
-                    os.makedirs("downloads")
-
-                # Generate clean filename
-                filename = link.split("/")[-1]
-                if not filename.endswith((".mp3", ".mp4", ".m4a")):
-                    filename = f"audio_{os.urandom(4).hex()}.mp3" # Safe fallback name
-                
-                xyz = os.path.join("downloads", filename)
-
-                if os.path.exists(xyz):
-                    return xyz, True
-
-                # Aria2 Command
-                # -x16: 16 connections (Max speed)
-                # -s16: Split into 16 parts
-                # -k1M: Min split size
+                # Aria2 Command (16x Connections)
                 cmd = [
                     "aria2c",
-                    "-x16",
-                    "-s16",
+                    "-x16", "-s16",
                     "-d", "downloads",
                     "-o", filename,
                     link
@@ -319,16 +329,14 @@ class YouTubeAPI:
                 )
                 stdout, stderr = await process.communicate()
 
-                if os.path.exists(xyz):
-                    print("✅ ARIA2: Download Success")
-                    return xyz, True
+                if os.path.exists(file_path):
+                    return file_path, True
                 else:
-                    print(f"❌ ARIA2 Failed: {stderr.decode()}")
-                    # Fallback to normal flow if Aria fails
+                    print(f"❌ Aria2 Failed: {stderr.decode()}")
             except Exception as e:
                 print(f"⚠️ Aria2 Exception: {e}")
 
-        # ⬇️ 2. ORIGINAL YT-DLP FALLBACK (If API not used or failed)
+        # ⬇️ NORMAL YT-DLP FALLBACK (If API fails or URL is YouTube)
         if videoid:
             link = self.base + link
         loop = asyncio.get_running_loop()
